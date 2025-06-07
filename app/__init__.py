@@ -1,8 +1,8 @@
-# app/__init__.py
+# app/__init__.py (Tidak ada perubahan yang diperlukan)
 
 from flask import Flask
 from config import Config
-from app.models import db, Book, Category, Member, Loan
+from app.models import db, Book, Category, Member, Loan # Pastikan ini mengimpor semua model Anda
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 
@@ -14,24 +14,12 @@ def create_app():
     migrate = Migrate(app, db)
     jwt = JWTManager(app)
 
-    from app.routes import api_bp
+    from app.routes import api_bp # Ini akan mengimpor blueprint yang benar
     app.register_blueprint(api_bp, url_prefix='/api')
-
-    # Remove the initial data seeding from here
-    # with app.app_context():
-    #     try:
-    #         if not Category.query.first():
-    #             # ... (all your initial data logic) ...
-    #     except Exception as e:
-    #         print(f"Error adding initial data: {e}")
-    #         db.session.rollback()
 
     return app
 
 # --- NEW: Create a separate function/script for seeding data ---
-# You can put this in a new file, e.g., 'seed.py' or as a Flask CLI command.
-# For simplicity, I'll show it as a function you'd call manually after migrations.
-
 def seed_initial_data(app):
     with app.app_context():
         try:

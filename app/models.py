@@ -1,34 +1,39 @@
+# app/models.py
 
-# app/models.py (Pastikan ini ada di file models.py Anda)
-
-from app import db # Ini mengacu pada objek db dari __init__.py
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date
 
+# Inisialisasi db di sini untuk definisi model, tapi akan diinisialisasi ulang di create_app
+db = SQLAlchemy()
+
 # --- SQLAlchemy Models ---
 class Category(db.Model):
+    __tablename__ = 'categories' # Pastikan nama tabel konsisten
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(64), nullable=False)
-    # Relasi balik ke Book jika diperlukan
-    books = db.relationship('Book', backref='category', lazy=True)
-=======
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
-db = SQLAlchemy() # Ini akan diinisialisasi di __init__.py, tapi perlu di sini untuk definisi model
+    name = db.Column(db.String(100), nullable=False, unique=True) # Tambahkan unique=True
+
+    # Relasi balik ke Book jika diperlukan. Gunakan `lazy='dynamic'` untuk query yang lebih fleksibel.
+    books = db.relationship('Book', backref='category', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name
+        }
 
 class Book(db.Model):
     __tablename__ = 'books'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
     author = db.Column(db.String(100))
-    year = db.Column(db.Integer) # Menggunakan 'year' sesuai dengan model Anda
+    year = db.Column(db.Integer)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
     status = db.Column(db.Enum('available', 'borrowed'), default='available')
 
-
-    # Relasi ke Category
-    category = db.relationship('Category', backref='books')
+    # Relasi ke Category didefinisikan di atas (backref='category')
 
     def to_dict(self):
         return {
@@ -38,26 +43,18 @@ class Book(db.Model):
             "year": self.year,
             "category_id": self.category_id,
             "status": self.status,
-            "category_name": self.category.name if self.category else None
-        }
-
-class Category(db.Model):
-    __tablename__ = 'categories'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True) # Tambahkan unique=True untuk nama kategori
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name
+            "category_name": self.category.name if self.category else None # Mengakses nama kategori
         }
 
 class Member(db.Model):
     __tablename__ = 'members'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(100), unique=True, nullable=False) # diasumsikan email harus unik dan tidak boleh null
-    password_hash = db.Column(db.String(255), nullable=False) # Kolom untuk menyimpan hash password
+    # Gunakan 'username' atau 'name' secara konsisten. Anda punya `name` di SQLAlchemy dan `username` di Flask-JWT-Extended (login controller).
+    # Saya akan pakai 'name' di model ini agar konsisten dengan `to_dict` Anda.
+    # Jika Anda ingin 'username' untuk login, pastikan field ini juga unik.
+    name = db.Column(db.String(100), nullable=False, unique=True) # Diasumsikan nama juga unik untuk login
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -70,7 +67,7 @@ class Member(db.Model):
             "id": self.id,
             "name": self.name,
             "email": self.email
-            # Do NOT include password_hash in to_dict for security reasons
+            # Do NOT include password_hash for security reasons
         }
 
 class Loan(db.Model):
@@ -78,47 +75,7 @@ class Loan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     book_id = db.Column(db.Integer, db.ForeignKey('books.id'))
     member_id = db.Column(db.Integer, db.ForeignKey('members.id'))
-    loan_date = db.Column(db.Date)
-
-    return_date = db.Column(db.Date)
-
-# --- Pydantic Models for API Input/Output ---
-# Ini digunakan untuk validasi data dari request body dan serialisasi response
-class BookSchema(BaseModel):
-    id: int
-    title: str
-    author: Optional[str]
-    year: Optional[int]
-    category_id: Optional[int]
-    status: str
-
-    class Config:
-        orm_mode = True # Penting untuk mengkonversi SQLAlchemy ORM object ke Pydantic
-
-class BookCreate(BaseModel):
-    title: str = Field(..., min_length=1, max_length=128)
-    author: Optional[str] = Field(None, max_length=64)
-    year: Optional[int] = None
-    category_id: Optional[int] = None
-    status: Optional[str] = 'available'
-
-class BookUpdate(BaseModel):
-    title: Optional[str] = Field(None, min_length=1, max_length=128)
-    author: Optional[str] = Field(None, max_length=64)
-    year: Optional[int] = None
-    category_id: Optional[int] = None
-    status: Optional[str] = None
-
-# Anda bisa menambahkan Pydantic Schema untuk Category, Member, Loan juga
-class CategorySchema(BaseModel):
-    id: int
-    name: str
-    class Config:
-        orm_mode = True
-
-class CategoryCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=64)
-=======
+    loan_date = db.Column(db.Date, nullable=False, default=date.today) # loan_date tidak boleh null
     return_date = db.Column(db.Date, nullable=True) # return_date bisa null jika buku belum dikembalikan
 
     # Relasi ke Book dan Member
@@ -136,3 +93,82 @@ class CategoryCreate(BaseModel):
             "member_name": self.member.name if self.member else None
         }
 
+# --- Pydantic Models for API Input/Output ---
+# Ini digunakan untuk validasi data dari request body dan serialisasi response
+# Pastikan ini berada di luar definisi kelas SQLAlchemy Model
+class BookSchema(BaseModel):
+    id: int
+    title: str
+    author: Optional[str] = None
+    year: Optional[int] = None
+    category_id: Optional[int] = None
+    status: str
+
+    class Config:
+        from_attributes = True # Di Pydantic v2+, orm_mode diganti dengan from_attributes
+
+class BookCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=128)
+    author: Optional[str] = Field(None, max_length=64)
+    year: Optional[int] = None
+    category_id: Optional[int] = None
+    status: Optional[str] = 'available'
+
+class BookUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=128)
+    author: Optional[str] = Field(None, max_length=64)
+    year: Optional[int] = None
+    category_id: Optional[int] = None
+    status: Optional[str] = None
+
+class CategorySchema(BaseModel):
+    id: int
+    name: str
+
+    class Config:
+        from_attributes = True # Di Pydantic v2+, orm_mode diganti dengan from_attributes
+
+class CategoryCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+
+# Tambahkan Pydantic Models lainnya sesuai kebutuhan
+class MemberSchema(BaseModel):
+    id: int
+    name: str
+    email: str
+
+    class Config:
+        from_attributes = True
+
+class MemberCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(..., pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$") # Validasi email sederhana
+    password: str = Field(..., min_length=6)
+
+class MemberUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    email: Optional[str] = Field(None, pattern=r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    password: Optional[str] = Field(None, min_length=6)
+
+class LoanSchema(BaseModel):
+    id: int
+    book_id: int
+    member_id: int
+    loan_date: date # Menggunakan type `date` dari datetime module
+    return_date: Optional[date] = None
+    book_title: Optional[str] = None # Untuk respons yang lebih informatif
+    member_name: Optional[str] = None # Untuk respons yang lebih informatif
+
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            date: lambda v: v.isoformat()
+        }
+
+class LoanCreate(BaseModel):
+    book_id: int
+    member_id: int
+    loan_date: Optional[date] = Field(default_factory=date.today) # Default hari ini
+
+class LoanReturn(BaseModel):
+    return_date: Optional[date] = Field(default_factory=date.today) # Default hari ini
