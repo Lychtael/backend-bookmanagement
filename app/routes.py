@@ -1,9 +1,12 @@
+# app/routes.py
 
 from flask import Blueprint
 from app.controllers import (
     # Authentication Controllers
     register_user_controller, # Renamed
     login_user_controller,    # Renamed
+    register_member_controller,
+    login_member_controller,
     # Book Controllers
     get_all_books_controller, get_book_by_id_controller,
     create_book_controller, update_book_controller, delete_book_controller,
@@ -19,6 +22,7 @@ from app.controllers import (
 )
 from flask_jwt_extended import jwt_required
 
+# Inisialisasi Flask Blueprint Anda. Ini adalah objek yang akan mendaftarkan semua rute API Anda.
 api_bp = Blueprint('api', __name__)
 
 # --- Authentication Routes ---
@@ -88,7 +92,11 @@ def get_users(): # Renamed
 @jwt_required() # Protect this route
 def get_single_user(user_id): # Renamed
     return get_user_by_id_controller(user_id)
+@api_bp.route('/members/<int:member_id>', methods=['GET'])
+def get_single_member(member_id):
+    return get_member_by_id_controller(member_id)
 
+# The old create_member route is replaced by /register. No specific route here for it.
 @api_bp.route('/users/<string:user_id>', methods=['PUT']) # Renamed, changed to string
 @jwt_required() # Protect this route
 def update_user(user_id): # Renamed

@@ -1,4 +1,4 @@
-# run.py
+# run.py (Tidak ada perubahan yang diperlukan, hanya konfirmasi port 5001)
 
 import os
 from dotenv import load_dotenv
@@ -15,4 +15,5 @@ def seed_command():
     seed_initial_data(app)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001) # <--- Add port=5001 here
+    # Pastikan hanya satu baris app.run() yang aktif
+    app.run(debug=True, host='0.0.0.0', port=5001)

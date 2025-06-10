@@ -30,11 +30,35 @@ def register_user_controller(): # Renamed from register_member_controller
     if not data:
         return jsonify({"message": "Request body must be JSON"}), 400
 
+from app.models import db, Book, Category, Member, Loan # Pastikan db diimpor dari app.models
+from flask import jsonify, request, abort # Import abort untuk respons HTTP yang lebih baik
+from datetime import date
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+
+# Impor Pydantic Models Anda (jika Anda akan menggunakannya untuk validasi)
+# from app.models import BookCreate, BookUpdate, CategoryCreate, MemberCreate, MemberUpdate, LoanCreate, LoanReturn
+
+# --- Authentication Controllers ---
+def register_member_controller():
+    data = request.get_json()
+    if not data:
+        return jsonify({"message": "Request body must be JSON"}), 400
+
+    # Contoh penggunaan Pydantic untuk validasi input registrasi
+    # try:
+    #     member_data = MemberCreate(**data)
+    # except ValueError as e:
+    #     return jsonify({"message": f"Invalid registration data: {e.errors()}"}), 400
+
+    # Menggunakan validasi manual jika tidak memakai Pydantic di sini
+    required_fields = ['name', 'email', 'password']
+    if not all(k in data for k in required_fields):
+        return jsonify({"message": f"Missing required fields: {', '.join(f for f in required_fields if f not in data)}"}), 400
+
     try:
         user_data = UserRegister(**data)
     except Exception as e:
         return jsonify({"message": f"Invalid registration data: {e.errors() if hasattr(e, 'errors') else str(e)}"}), 400
-
     if User.query.filter_by(email=user_data.email).first():
         return jsonify({"message": "User with this email already exists"}), 409
 
@@ -47,16 +71,26 @@ def register_user_controller(): # Renamed from register_member_controller
         db.session.add(new_user)
         db.session.commit()
         return jsonify({"message": "User registered successfully", "user": new_user.to_dict()}), 201
+    try:
+        new_member = Member(name=data['name'], email=data['email'])
+        new_member.set_password(data['password'])
+        db.session.add(new_member)
+        db.session.commit()
+        return jsonify({"message": "Member registered successfully", "member": new_member.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
         print(f"Error during registration: {e}")
         return jsonify({"message": "Internal server error during registration"}), 500
 
-
 def login_user_controller(): # Renamed from login_member_controller
+def login_member_controller():
     data = request.get_json()
-    if not data or not all(k in data for k in ('email', 'password')):
-        return jsonify({"message": "Email and password are required fields"}), 400
+    if not data:
+        return jsonify({"message": "Request body must be JSON"}), 400
+
+    required_fields = ['email', 'password']
+    if not all(k in data for k in required_fields):
+        return jsonify({"message": f"Missing required fields: {', '.join(f for f in required_fields if f not in data)}"}), 400
 
     user = User.query.filter_by(email=data['email']).first()
     if not user or not user.check_password(data['password']):
@@ -80,17 +114,14 @@ def login_user_controller(): # Renamed from login_member_controller
         db.session.commit()
 
     return jsonify(access_token=access_token, user_id=user.id, role=user.role.name), 200
+    access_token = create_access_token(identity=str(member.id)) # Identitas adalah string ID member
+    return jsonify(access_token=access_token, member_id=member.id), 200 # Tambahkan member_id untuk frontend
 
 # --- Book Controllers ---
-# The existing book controllers can remain the same, but you might want to add @jwt_required
-# to protect them if they are for authenticated users only.
-# For example:
-# @jwt_required()
 def get_all_books_controller():
     books = Book.query.all()
     return jsonify([book.to_dict() for book in books]), 200
 
-# Add @jwt_required() to controllers that need authentication
 def get_book_by_id_controller(book_id):
     book = Book.query.get(book_id)
     if book:
@@ -102,7 +133,6 @@ def create_book_controller():
     data = request.get_json()
     if not data:
         return jsonify({"message": "Request body must be JSON"}), 400
-
     try:
         book_data = BookCreate(**data)
     except Exception as e:
@@ -121,6 +151,30 @@ def create_book_controller():
             imageUrl=book_data.imageUrl,
             isAvailable=book_data.isAvailable,
             category_id=book_data.category_id
+    # Contoh penggunaan Pydantic untuk validasi input buku
+    # try:
+    #     book_data = BookCreate(**data)
+    # except ValueError as e:
+    #     return jsonify({"message": f"Invalid book data: {e.errors()}"}), 400
+
+    # Menggunakan validasi manual
+    required_fields = ['title', 'author']
+    if not all(k in data for k in required_fields):
+        return jsonify({"message": f"Missing required fields: {', '.join(f for f in required_fields if f not in data)}"}), 400
+
+    # Opsional: Validasi category_id jika disediakan
+    category_id = data.get('category_id')
+    if category_id:
+        if not Category.query.get(category_id):
+            return jsonify({"message": f"Category with ID {category_id} not found"}), 400
+
+    try:
+        new_book = Book(
+            title=data['title'],
+            author=data['author'],
+            year=data.get('year'),
+            category_id=category_id,
+            status=data.get('status', 'available')
         )
         db.session.add(new_book)
         db.session.commit()
@@ -173,17 +227,52 @@ def update_book_controller(book_id):
     db.session.commit()
     return jsonify({"message": "Book updated successfully", "book": book.to_dict()}), 200
 
+
+    if 'title' in data:
+        book.title = data['title']
+    if 'author' in data:
+        book.author = data['author']
+    if 'year' in data:
+        book.year = data['year']
+    if 'category_id' in data:
+        category_id = data['category_id']
+        if category_id is not None and not Category.query.get(category_id):
+            return jsonify({"message": f"Category with ID {category_id} not found"}), 400
+        book.category_id = category_id
+    if 'status' in data:
+        if data['status'] in ['available', 'borrowed']:
+            book.status = data['status']
+        else:
+            return jsonify({"message": "Invalid status value. Must be 'available' or 'borrowed'"}), 400
+
+    try:
+        db.session.commit()
+        return jsonify({"message": "Book updated successfully", "book": book.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating book: {e}")
+        return jsonify({"message": "Internal server error while updating book"}), 500
+
 @role_required('Admin')
 def delete_book_controller(book_id):
     book = Book.query.get(book_id)
     if not book:
         return jsonify({"message": f"Book with ID {book_id} not found"}), 404
+
     if Borrow.query.filter_by(book_id=book_id, return_date=None).first():
+
+    if Loan.query.filter_by(book_id=book_id, return_date=None).first():
+
         return jsonify({"message": "Cannot delete book: it is currently borrowed"}), 400
 
-    db.session.delete(book)
-    db.session.commit()
-    return jsonify({"message": "Book deleted successfully"}), 200
+    try:
+        db.session.delete(book)
+        db.session.commit()
+        return jsonify({"message": "Book deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting book: {e}")
+        return jsonify({"message": "Internal server error while deleting book"}), 500
 
 # --- Category Controllers ---
 def get_all_categories_controller():
@@ -223,6 +312,20 @@ def create_category_controller():
     db.session.add(new_category)
     db.session.commit()
     return jsonify({"message": "Category created successfully", "category": new_category.to_dict()}), 201
+    if not data or 'name' not in data:
+        return jsonify({"message": "Category name is required"}), 400
+    if Category.query.filter_by(name=data['name']).first():
+        return jsonify({"message": "Category with this name already exists"}), 409
+
+    try:
+        new_category = Category(name=data['name'])
+        db.session.add(new_category)
+        db.session.commit()
+        return jsonify({"message": "Category created successfully", "category": new_category.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating category: {e}")
+        return jsonify({"message": "Internal server error while creating category"}), 500
 
 @role_required('Admin')
 def update_category_controller(category_id):
@@ -233,10 +336,20 @@ def update_category_controller(category_id):
     if not data:
         return jsonify({"message": "No data provided for update"}), 400
 
+
     try:
         category_data = CategoryCreate(**data) # Using create schema as it just has name
     except Exception as e:
         return jsonify({"message": f"Invalid category data: {e.errors() if hasattr(e, 'errors') else str(e)}"}), 400
+
+    category.name = data['name']
+    try:
+        db.session.commit()
+        return jsonify({"message": "Category updated successfully", "category": category.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating category: {e}")
+        return jsonify({"message": "Internal server error while updating category"}), 500
 
     if Category.query.filter_by(name=category_data.name).first() and category_data.name != category.name:
         return jsonify({"message": "Category with this name already exists"}), 409
@@ -254,9 +367,9 @@ def delete_category_controller(category_id):
     category = Category.query.get(category_id)
     if not category:
         return jsonify({"message": f"Category with ID {category_id} not found"}), 404
-    # Cek apakah ada buku yang terkait dengan kategori ini
     if Book.query.filter_by(category_id=category_id).first():
         return jsonify({"message": "Cannot delete category: books are associated with it"}), 400
+
 
     db.session.delete(category)
     db.session.commit()
@@ -282,6 +395,23 @@ def get_user_by_id_controller(user_id): # Renamed from get_member_by_id_controll
     else:
         return jsonify({"message": "You are not authorized to view this user's profile"}), 403
 
+    try:
+        db.session.delete(category)
+        db.session.commit()
+        return jsonify({"message": "Category deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting category: {e}")
+        return jsonify({"message": "Internal server error while deleting category"}), 500
+
+
+# --- Member Controllers ---
+def get_all_members_controller():
+    members = Member.query.all()
+    # Jangan kembalikan password_hash
+    return jsonify([member.to_dict() for member in members]), 200
+
+
 
 @jwt_required()
 def update_user_controller(user_id): # Renamed from update_member_controller
@@ -289,6 +419,13 @@ def update_user_controller(user_id): # Renamed from update_member_controller
     user = User.query.get(user_id)
     if not user:
         return jsonify({"message": f"User with ID {user_id} not found"}), 404
+
+def update_member_controller(member_id):
+    # current_user_id dari JWT adalah string, member_id dari URL adalah int. Konversi!
+    current_user_id = int(get_jwt_identity())
+    if current_user_id != member_id:
+        return jsonify({"message": "You are not authorized to update this member's profile"}), 403
+
 
     requester = User.query.get(current_user_id)
     if not (requester.role.name == 'Admin' or current_user_id == user_id):
@@ -347,6 +484,53 @@ def delete_user_controller(user_id): # Renamed from delete_member_controller
         return jsonify({"message": "Internal server error while deleting user"}), 500
 
 
+
+
+    if 'name' in data:
+        member.name = data['name']
+    if 'email' in data:
+        if Member.query.filter_by(email=data['email']).first() and data['email'] != member.email:
+            return jsonify({"message": "Member with this email already exists"}), 409
+        member.email = data['email']
+    if 'password' in data:
+        member.set_password(data['password'])
+
+    try:
+        db.session.commit()
+        return jsonify({"message": "Member updated successfully", "member": member.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error updating member: {e}")
+        return jsonify({"message": "Internal server error while updating member"}), 500
+
+
+@jwt_required()
+def delete_member_controller(member_id):
+    current_user_id = int(get_jwt_identity())
+    # Hanya izinkan admin atau pengguna itu sendiri untuk menghapus
+    # Jika hanya pengguna sendiri, cek `current_user_id != member_id`
+    # Untuk admin, Anda perlu sistem role, yang tidak ada di sini.
+    if current_user_id != member_id:
+        return jsonify({"message": "You are not authorized to delete this member"}), 403
+
+
+    member = Member.query.get(member_id)
+    if not member:
+        return jsonify({"message": f"Member with ID {member_id} not found"}), 404
+    if Loan.query.filter_by(member_id=member_id, return_date=None).first():
+        return jsonify({"message": "Cannot delete member: they have active loans"}), 400
+
+    try:
+        db.session.delete(member)
+        db.session.commit()
+        return jsonify({"message": "Member deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting member: {e}")
+        return jsonify({"message": "Internal server error while deleting member"}), 500
+
+
+# --- Loan Controllers ---
 @jwt_required()
 def get_all_borrows_controller(): # Renamed from get_all_loans_controller
     borrows = Borrow.query.all()
@@ -365,6 +549,11 @@ def create_borrow_controller(): # Renamed from create_loan_controller
     if not data:
         return jsonify({"message": "Request body must be JSON"}), 400
 
+    required_fields = ['book_id', 'member_id'] # loan_date bisa diatur otomatis
+    if not all(k in data for k in required_fields):
+        return jsonify({"message": f"Missing required fields: {', '.join(f for f in required_fields if f not in data)}"}), 400
+
+
     try:
         borrow_data = BorrowCreate(**data)
     except Exception as e:
@@ -382,7 +571,17 @@ def create_borrow_controller(): # Renamed from create_loan_controller
     if borrow_data.loan_date and borrow_data.due_date <= borrow_data.loan_date:
         return jsonify({"message": "Due date must be after loan date"}), 400
 
+    loan_date_str = data.get('loan_date')
+    if loan_date_str:
+        try:
+            loan_date = date.fromisoformat(loan_date_str)
+        except ValueError:
+            return jsonify({"message": "Invalid loan_date format. Use YYYY-MM-DD"}), 400
+    else:
+        loan_date = date.today() # Default to today if not provided
+
     try:
+
         new_borrow = Borrow(
             book_id=borrow_data.book_id,
             user_id=borrow_data.user_id,
@@ -431,6 +630,38 @@ def return_book_controller(borrow_id): # No change in function name, but updates
             borrow.book.isAvailable = True # Update book status
         db.session.commit()
         return jsonify({"message": "Book returned successfully", "borrow": borrow.to_dict()}), 200
+
+        new_loan = Loan(
+            book_id=data['book_id'],
+            member_id=data['member_id'],
+            loan_date=loan_date
+        )
+        db.session.add(new_loan)
+        book.status = 'borrowed'
+        db.session.commit()
+        return jsonify({"message": "Loan created successfully", "loan": new_loan.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating loan: {e}")
+        return jsonify({"message": "Internal server error while creating loan"}), 500
+
+
+@jwt_required()
+def return_book_controller(loan_id):
+    loan = Loan.query.get(loan_id)
+    if not loan:
+        return jsonify({"message": f"Loan with ID {loan_id} not found"}), 404
+    if loan.return_date:
+        return jsonify({"message": "Book already returned for this loan"}), 400
+
+    try:
+        loan.return_date = date.today()
+        # Pastikan book terkait ada sebelum mengubah statusnya
+        if loan.book:
+            loan.book.status = 'available'
+        db.session.commit()
+        return jsonify({"message": "Book returned successfully", "loan": loan.to_dict()}), 200
+
     except Exception as e:
         db.session.rollback()
         print(f"Error returning book: {e}")
@@ -438,6 +669,7 @@ def return_book_controller(borrow_id): # No change in function name, but updates
 
 
 @jwt_required()
+
 def delete_borrow_controller(borrow_id): # Renamed from delete_loan_controller
     borrow = Borrow.query.get(borrow_id)
     if not borrow:
@@ -453,3 +685,21 @@ def delete_borrow_controller(borrow_id): # Renamed from delete_loan_controller
         db.session.rollback()
         print(f"Error deleting borrow: {e}")
         return jsonify({"message": "Internal server error while deleting borrow"}), 500
+
+def delete_loan_controller(loan_id):
+    loan = Loan.query.get(loan_id)
+    if not loan:
+        return jsonify({"message": f"Loan with ID {loan_id} not found"}), 404
+
+    try:
+        # Jika buku belum dikembalikan, kembalikan status buku ke 'available'
+        if loan.book and not loan.return_date:
+            loan.book.status = 'available'
+        db.session.delete(loan)
+        db.session.commit()
+        return jsonify({"message": "Loan deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting loan: {e}")
+        return jsonify({"message": "Internal server error while deleting loan"}), 500
+
