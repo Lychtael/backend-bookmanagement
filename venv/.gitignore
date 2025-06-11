@@ -1,0 +1,48 @@
+# --- Environment & Secrets ---
+# Ignore the entire virtual environment folder. Each developer on your
+# team will create their own local 'venv'. This is the most important rule.
+/venv/
+
+# Ignore the file that holds all our secret keys, API keys, and database passwords.
+# We will share a template for this file instead (e.g., .env.example)
+.env
+.flaskenv
+
+# Ignore any local SQLite database files if you use them for testing.
+*.db
+*.sqlite3
+
+
+# --- Python ---
+# Ignore Python's auto-generated cache folders and compiled files.
+# These are created automatically when you run the code and don't belong in the repository.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+
+# --- IDE / Editor specific settings ---
+# Ignore settings files from common code editors. Each developer has their own setup.
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+
+# --- Operating System specific files ---
+# Ignore files automatically created by different operating systems.
+.DS_Store
+Thumbs.db
+
+
+# --- Instance Folder ---
+# Ignore the instance folder, which can hold configuration or temporary files.
+/instance/
+
+
+# --- Log files ---
+# Ignore any log files the application might generate.
+*.log
+logs/
+
