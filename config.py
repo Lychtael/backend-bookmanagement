@@ -6,7 +6,7 @@ class Config:
     # sudah ada di file .env Anda atau di lingkungan sistem Anda.
     MYSQL_HOST = os.environ.get('MYSQL_HOST') or 'localhost'
     MYSQL_USER = os.environ.get('MYSQL_USER') or 'root'
-    MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD') or '' # Sesuaikan dengan password root MySQL Anda
+    MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD') or 'password' # Sesuaikan dengan password root MySQL Anda
     MYSQL_DB = os.environ.get('MYSQL_DB') or 'perpus'
 
     # Ini adalah URL koneksi utama yang akan digunakan SQLAlchemy dan Flask-Migrate
