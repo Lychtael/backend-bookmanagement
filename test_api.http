@@ -1,0 +1,217 @@
+### test_api.http
+# A complete test suite for all API endpoints.
+# Remember to run your server on port 5000: flask run
+# Run these requests from top to bottom.
+
+# -----------------------------------------------------------------
+# VARIABLES
+# -----------------------------------------------------------------
+
+@host = http://127.0.0.1:5000
+@api_prefix = /api
+
+# Store the token from the admin login response
+@admin_token = {{loginAdmin.response.body.access_token}}
+
+# Store the token from the new user login response
+@user_token = {{loginNewUser.response.body.access_token}}
+
+# Capture the ID of the new book we create
+@newBookId = {{createBook.response.body.book.id}}
+
+# Capture the ID of the new category we create
+@newCategoryId = {{createCategory.response.body.category.id}}
+
+# Capture the ID of the new user we register
+@newUserId = {{registerUser.response.body.user.id}}
+
+# Capture the ID of the new borrow record we create
+@newBorrowId = {{createBorrow.response.body.borrow.id}}
+
+
+# =================================================================
+# AUTHENTICATION
+# =================================================================
+
+### 1. Register a new user (Role: User)
+# @name registerUser
+POST {{host}}{{api_prefix}}/register
+Content-Type: application/json
+
+{
+    "name": "Test User",
+    "email": "testuser123@example.com",
+    "password": "password123"
+}
+
+###
+### 2. Login as the ADMIN to get a token for protected routes
+# @name loginAdmin
+POST {{host}}{{api_prefix}}/login
+Content-Type: application/json
+
+{
+    "email": "alice@example.com",
+    "password": "password123"
+}
+
+###
+### 3. Login as the NEW USER to get their token
+# @name loginNewUser
+POST {{host}}{{api_prefix}}/login
+Content-Type: application/json
+
+{
+    "email": "testuser123@example.com",
+    "password": "password123"
+}
+
+
+# =================================================================
+# BOOKS CRUD (Requires Admin Token)
+# =================================================================
+
+### GET all books (Public route)
+GET {{host}}{{api_prefix}}/books
+
+###
+### GET a single book by ID
+GET {{host}}{{api_prefix}}/books/1
+
+###
+### CREATE a new book
+# @name createBook
+POST {{host}}{{api_prefix}}/books
+Content-Type: application/json
+Authorization: Bearer {{admin_token}}
+
+{
+    "title": "The Hitchhiker's Guide to the Galaxy",
+    "author": "Douglas Adams",
+    "year": 1979,
+    "description": "A comedic science fiction adventure.",
+    "imageUrl": "https://example.com/hhgttg.jpg",
+    "category_id": 2
+}
+
+###
+### UPDATE the new book we just created
+PUT {{host}}{{api_prefix}}/books/{{newBookId}}
+Content-Type: application/json
+Authorization: Bearer {{admin_token}}
+
+{
+    "year": 1980
+}
+
+###
+### DELETE the new book we just created
+DELETE {{host}}{{api_prefix}}/books/{{newBookId}}
+Authorization: Bearer {{admin_token}}
+
+
+# =================================================================
+# CATEGORIES CRUD (Requires Admin Token)
+# =================================================================
+
+### GET all categories (Public route)
+GET {{host}}{{api_prefix}}/categories
+
+###
+### GET a single category by ID
+GET {{host}}{{api_prefix}}/categories/1
+
+###
+### CREATE a new category
+# @name createCategory
+POST {{host}}{{api_prefix}}/categories
+Content-Type: application/json
+Authorization: Bearer {{admin_token}}
+
+{
+    "name": "Fantasy"
+}
+
+###
+### UPDATE the new category we just created
+PUT {{host}}{{api_prefix}}/categories/{{newCategoryId}}
+Content-Type: application/json
+Authorization: Bearer {{admin_token}}
+
+{
+    "name": "High Fantasy"
+}
+
+###
+### DELETE the new category we just created
+DELETE {{host}}{{api_prefix}}/categories/{{newCategoryId}}
+Authorization: Bearer {{admin_token}}
+
+
+# =================================================================
+# USERS CRUD (Requires Admin Token)
+# =================================================================
+
+### GET all users
+GET {{host}}{{api_prefix}}/users
+Authorization: Bearer {{admin_token}}
+
+###
+### GET the new user we just registered
+GET {{host}}{{api_prefix}}/users/{{newUserId}}
+Authorization: Bearer {{admin_token}}
+
+###
+### UPDATE the new user we just registered
+# NOTE: Your controller returns "not implemented", this will show a 501 error.
+PUT {{host}}{{api_prefix}}/users/{{newUserId}}
+Content-Type: application/json
+Authorization: Bearer {{admin_token}}
+
+{
+    "name": "Test User Updated"
+}
+
+###
+### DELETE the new user we just registered
+# NOTE: Your controller returns "not implemented", this will show a 501 error.
+DELETE {{host}}{{api_prefix}}/users/{{newUserId}}
+Authorization: Bearer {{admin_token}}
+
+
+# =================================================================
+# BORROWS CRUD (Requires User Token)
+# =================================================================
+
+### GET all borrow records (as Admin)
+GET {{host}}{{api_prefix}}/borrows
+Authorization: Bearer {{admin_token}}
+
+###
+### CREATE a new borrow record (as the new user, borrowing book #1)
+# @name createBorrow
+POST {{host}}{{api_prefix}}/borrows
+Content-Type: application/json
+Authorization: Bearer {{user_token}}
+
+{
+    "book_id": "1",
+    "user_id": "{{newUserId}}",
+    "due_date": "2025-12-31"
+}
+
+###
+### GET the new borrow record by its ID
+GET {{host}}{{api_prefix}}/borrows/{{newBorrowId}}
+Authorization: Bearer {{user_token}}
+
+###
+### RETURN the book for the new borrow record
+PUT {{host}}{{api_prefix}}/borrows/{{newBorrowId}}/return
+Authorization: Bearer {{user_token}}
+
+###
+### DELETE the borrow record (as Admin)
+DELETE {{host}}{{api_prefix}}/borrows/{{newBorrowId}}
+Authorization: Bearer {{admin_token}}
+
